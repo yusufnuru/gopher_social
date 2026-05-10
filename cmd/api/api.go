@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/yusufnuru/gopher_social/internal/store"
 )
 
@@ -55,13 +56,22 @@ func (app *application) mount() *chi.Mux {
 				r.Patch("/", app.updatePostHandler)
 			})
 		})
+
+		r.Route("/users", func(r chi.Router) {
+			r.Route("/{userID}", func(r chi.Router) {
+				r.Use(app.userContexMiddlewareHandler)
+
+				r.Get("/", app.getUserHandler)
+				r.Put("/follow", app.followUserHandler)
+				r.Put("/unfollow", app.unfollowUserHandler)
+			})
+		})
 	})
 
 	return r
 }
 
 func (app *application) run(mux http.Handler) error {
-
 	srv := &http.Server{
 		Addr:         app.config.addr,
 		Handler:      mux,

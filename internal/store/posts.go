@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	"github.com/lib/pq"
 )
@@ -20,11 +19,11 @@ type Post struct {
 	Version   int       `json:"version"`
 }
 
-type PostsStore struct {
+type PostStore struct {
 	db *sql.DB
 }
 
-func (s *PostsStore) Create(ctx context.Context, post *Post) error {
+func (s *PostStore) Create(ctx context.Context, post *Post) error {
 	query := `
 		INSERT INTO posts (content, title, user_id, tags)
 		VALUES ($1, $2, $3, $4) RETURNING id, created_at, updated_at
@@ -40,7 +39,6 @@ func (s *PostsStore) Create(ctx context.Context, post *Post) error {
 		post.UserID,
 		pq.Array(post.Tags),
 	).Scan(&post.ID, &post.CreatedAt, &post.UpdatedAt)
-
 	if err != nil {
 		return err
 	}
@@ -48,7 +46,7 @@ func (s *PostsStore) Create(ctx context.Context, post *Post) error {
 	return nil
 }
 
-func (s *PostsStore) GetByID(ctx context.Context, id int64) (*Post, error) {
+func (s *PostStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 	query := `
 		SELECT id, user_id, title, content, created_at, updated_at, tags, version
 		FROM posts WHERE id = $1
@@ -57,8 +55,7 @@ func (s *PostsStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
 	defer cancel()
 
-	var post Post
-
+	post := &Post{}
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&post.ID,
 		&post.UserID,
@@ -69,20 +66,19 @@ func (s *PostsStore) GetByID(ctx context.Context, id int64) (*Post, error) {
 		pq.Array(&post.Tags),
 		&post.Version,
 	)
-
 	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		switch err {
+		case sql.ErrNoRows:
 			return nil, ErrNotFound
 		default:
 			return nil, err
 		}
 	}
 
-	return &post, nil
+	return post, nil
 }
 
-func (s *PostsStore) Delete(ctx context.Context, postID int64) error {
+func (s *PostStore) Delete(ctx context.Context, postID int64) error {
 	query := `DELETE FROM posts WHERE id = $1`
 
 	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
@@ -104,7 +100,7 @@ func (s *PostsStore) Delete(ctx context.Context, postID int64) error {
 	return nil
 }
 
-func (s *PostsStore) Update(ctx context.Context, post *Post) error {
+func (s *PostStore) Update(ctx context.Context, post *Post) error {
 	query := `
 		UPDATE posts
 		SET title = $1, content = $2, updated_at = NOW(), version = version + 1
@@ -122,10 +118,9 @@ func (s *PostsStore) Update(ctx context.Context, post *Post) error {
 		post.ID,
 		post.Version,
 	).Scan(&post.Version)
-
 	if err != nil {
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
+		switch err {
+		case sql.ErrNoRows:
 			return ErrNotFound
 		default:
 			return err

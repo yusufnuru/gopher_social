@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/yusufnuru/gopher_social/internal/store"
 )
 
@@ -15,7 +15,7 @@ type postKey string
 const postCtx postKey = "post"
 
 type CreatePostPayload struct {
-	Title   string   `json:"title" validate:"required,max=100"`
+	Title   string   `json:"title"   validate:"required,max=100"`
 	Content string   `json:"content" validate:"required,max=1000"`
 	Tags    []string `json:"tags"`
 }
@@ -79,8 +79,8 @@ func (app *application) deletePostHandler(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 
 	if err := app.store.Posts.Delete(ctx, id); err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
+		switch err {
+		case store.ErrNotFound:
 			app.notFoundResponse(w, r, err)
 		default:
 			app.internalServerError(w, r, err)
@@ -92,7 +92,7 @@ func (app *application) deletePostHandler(w http.ResponseWriter, r *http.Request
 }
 
 type UpdatePostPayload struct {
-	Title   *string `json:"title" validate:"omitempty,max=100"`
+	Title   *string `json:"title"   validate:"omitempty,max=100"`
 	Content *string `json:"content" validate:"omitempty,max=1000"`
 }
 
@@ -140,8 +140,8 @@ func (app *application) postsContextMiddleware(next http.Handler) http.Handler {
 
 		post, err := app.store.Posts.GetByID(ctx, id)
 		if err != nil {
-			switch {
-			case errors.Is(err, store.ErrNotFound):
+			switch err {
+			case store.ErrNotFound:
 				app.notFoundResponse(w, r, err)
 			default:
 				app.internalServerError(w, r, err)
@@ -149,6 +149,7 @@ func (app *application) postsContextMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		ctx = context.WithValue(ctx, postCtx, post)
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
