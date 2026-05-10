@@ -15,11 +15,11 @@ type Comment struct {
 	User      User   `json:"user"`
 }
 
-type CommentsStore struct {
+type CommentStore struct {
 	db *sql.DB
 }
 
-func (s *CommentsStore) GetByPostID(ctx context.Context, postID int64) ([]Comment, error) {
+func (s *CommentStore) GetByPostID(ctx context.Context, postID int64) ([]Comment, error) {
 	query := `
 		SELECT c.id, c.post_id, c.user_id, c.content, c.created_at, c.updated_at, users.username, users.id FROM comments c
 		JOIN users on users.id = c.user_id
@@ -40,11 +40,43 @@ func (s *CommentsStore) GetByPostID(ctx context.Context, postID int64) ([]Commen
 	for rows.Next() {
 		c := Comment{}
 		c.User = User{}
-		err := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.Content, &c.CreatedAt, &c.UpdatedAt, &c.User.Username, c.User.ID)
+		err := rows.Scan(
+			&c.ID,
+			&c.PostID,
+			&c.UserID,
+			&c.Content,
+			&c.CreatedAt,
+			&c.UpdatedAt,
+			&c.User.Username,
+			&c.User.ID,
+		)
 		if err != nil {
 			return nil, err
 		}
 		comments = append(comments, c)
 	}
 	return comments, nil
+}
+
+func (s *CommentStore) Create(ctx context.Context, comment *Comment) error {
+	query := `
+		INSERT INTO comments (post_id, user_id, content)
+		VALUES ($1, $2, $3) RETURNING id, created_at, updated_at
+	`
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	err := s.db.QueryRowContext(
+		ctx,
+		query,
+		comment.PostID,
+		comment.UserID,
+		comment.Content,
+	).Scan(&comment.ID, &comment.CreatedAt, &comment.UpdatedAt)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
