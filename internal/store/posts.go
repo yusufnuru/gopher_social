@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/lib/pq"
 )
@@ -15,12 +16,70 @@ type Post struct {
 	Tags      []string  `json:"tags"`
 	CreatedAt string    `json:"created_at"`
 	UpdatedAt string    `json:"updated_at"`
-	Comments  []Comment `json:"comments"`
 	Version   int       `json:"version"`
+	Comments  []Comment `json:"comments"`
+	User      User      `json:"user"`
+}
+
+type PostWithMetadata struct {
+	Post
+	CommentsCount int `json:"comment_count"`
 }
 
 type PostStore struct {
 	db *sql.DB
+}
+
+func (s *PostStore) GetUserFeed(ctx context.Context, userID int64, fq PaginatedFeedQuery) ([]*PostWithMetadata, error) {
+	query := fmt.Sprintf(`
+    SELECT
+    	p.id, p.user_id, p.title, p.content, p.version, p.created_at, p.updated_at, p.tags,
+     	u.username,
+      COUNT(c.id) AS comments_count
+    FROM posts p
+    LEFT JOIN comments c ON c.post_id = p.id
+    LEFT JOIN users u ON p.user_id = u.id
+    LEFT JOIN followers f ON f.user_id = p.user_id AND f.follower_id = $1
+    WHERE
+    	(f.follower_id IS NOT NULL OR p.user_id = $1) AND
+     	(p.title ILIKE '%%' || $2 || '%%' OR p.content ILIKE '%%' || $2 || '%%' ) AND
+      (p.tags @> $3 OR array_length($3::varchar[], 1) IS NULL) AND
+      (p.created_at >= $6 OR $6 IS NULL) AND
+      (p.created_at <= $7 OR $7 IS NULL)
+    GROUP BY p.id, u.username
+    ORDER BY p.created_at %s
+    LIMIT $4 OFFSET $5;
+`, fq.Sort)
+
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeoutDuration)
+	defer cancel()
+
+	rows, err := s.db.QueryContext(ctx, query, userID, fq.Search, pq.Array(fq.Tags), fq.Limit, fq.Offset, fq.Since, fq.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	feed := []*PostWithMetadata{}
+	for rows.Next() {
+		p := &PostWithMetadata{}
+		err := rows.Scan(
+			&p.ID,
+			&p.UserID,
+			&p.Title,
+			&p.Content,
+			&p.Version,
+			&p.CreatedAt,
+			&p.UpdatedAt,
+			pq.Array(&p.Tags),
+			&p.User.Username,
+			&p.CommentsCount,
+		)
+		if err != nil {
+			return nil, err
+		}
+		feed = append(feed, p)
+	}
+	return feed, nil
 }
 
 func (s *PostStore) Create(ctx context.Context, post *Post) error {
