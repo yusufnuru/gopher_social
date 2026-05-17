@@ -28,7 +28,7 @@ type FollowUser struct {
 }
 
 func (app *application) followUserHandler(w http.ResponseWriter, r *http.Request) {
-	followerUser := getUserFromCtx(r)
+	followedUser := getUserFromCtx(r)
 
 	// todo: revert back to auth userID from ctx
 	var payload FollowUser
@@ -39,7 +39,7 @@ func (app *application) followUserHandler(w http.ResponseWriter, r *http.Request
 
 	ctx := r.Context()
 
-	if err := app.store.Followers.Follow(ctx, followerUser.ID, payload.UserID); err != nil {
+	if err := app.store.Followers.Follow(ctx, payload.UserID, followedUser.ID); err != nil {
 		switch err {
 		case store.ErrConflict:
 			app.conflictResponse(w, r, err)
@@ -67,7 +67,7 @@ func (app *application) unfollowUserHandler(w http.ResponseWriter, r *http.Reque
 
 	ctx := r.Context()
 
-	if err := app.store.Followers.Unfollow(ctx, unfollowedUser.ID, payload.UserID); err != nil {
+	if err := app.store.Followers.Unfollow(ctx, payload.UserID, unfollowedUser.ID); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
