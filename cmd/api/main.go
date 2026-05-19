@@ -1,11 +1,10 @@
 package main
 
 import (
-	"log"
-
 	"github.com/yusufnuru/gopher_social/internal/db"
 	"github.com/yusufnuru/gopher_social/internal/env"
 	"github.com/yusufnuru/gopher_social/internal/store"
+	"go.uber.org/zap"
 )
 
 const version = "0.0.1"
@@ -40,21 +39,25 @@ func main() {
 		env: env.GetString("ENV", "development"),
 	}
 
+	logger := zap.Must(zap.NewProduction()).Sugar()
+	defer logger.Sync()
+
 	db, err := db.New(cfg.db.addr, cfg.db.maxOpenConns, cfg.db.maxIdleConns, cfg.db.maxIdleTime)
 	if err != nil {
-		log.Panic(err)
+		logger.Fatal(err)
 	}
 
 	defer db.Close()
-	log.Println("db connected")
+	logger.Info("db connected")
 
 	store := store.NewStorage(db)
 	app := &application{
 		config: cfg,
 		store:  store,
+		logger: logger,
 	}
 
 	mux := app.mount()
 
-	log.Fatal(app.run(mux))
+	logger.Fatal(app.run(mux))
 }
