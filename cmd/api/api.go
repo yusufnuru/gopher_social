@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yusufnuru/gopher_social/docs" // This is required to generate swagger docs
+	"github.com/yusufnuru/gopher_social/internal/mailer"
 	"github.com/yusufnuru/gopher_social/internal/store"
 )
 
@@ -18,18 +19,26 @@ type application struct {
 	config config
 	store  store.Storage
 	logger *zap.SugaredLogger
+	mailer mailer.Client
 }
 
 type config struct {
-	addr   string
-	db     dbConfig
-	env    string
-	apiURL string
-	mail   mailConfig
+	addr        string
+	frontendURL string
+	db          dbConfig
+	env         string
+	apiURL      string
+	mail        mailConfig
 }
 
 type mailConfig struct {
-	exp time.Duration
+	exp       time.Duration
+	mailTrap  mailTrapConfig
+	fromEmail string
+}
+
+type mailTrapConfig struct {
+	apiKey string
 }
 
 type dbConfig struct {
