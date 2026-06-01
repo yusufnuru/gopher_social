@@ -11,15 +11,17 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yusufnuru/gopher_social/docs" // This is required to generate swagger docs
+	"github.com/yusufnuru/gopher_social/internal/auth"
 	"github.com/yusufnuru/gopher_social/internal/mailer"
 	"github.com/yusufnuru/gopher_social/internal/store"
 )
 
 type application struct {
-	config config
-	store  store.Storage
-	logger *zap.SugaredLogger
-	mailer mailer.Client
+	config        config
+	store         store.Storage
+	logger        *zap.SugaredLogger
+	mailer        mailer.Client
+	authenticator auth.Authenticator
 }
 
 type config struct {
@@ -34,11 +36,18 @@ type config struct {
 
 type authconfig struct {
 	basic basicconfig
+	token tokenconfig
 }
 
 type basicconfig struct {
 	user string
 	pass string
+}
+
+type tokenconfig struct {
+	secret string
+	exp    time.Duration
+	iss    string
 }
 
 type mailConfig struct {
@@ -78,6 +87,7 @@ func (app *application) mount() *chi.Mux {
 		r.Get("/swagger/*", httpSwagger.Handler(httpSwagger.URL(docsURL)))
 
 		r.Route("/posts", func(r chi.Router) {
+			r.Use(app.AuthTokenMiddleware)
 			r.Post("/", app.createPostHandler)
 
 			r.Route("/{postID}", func(r chi.Router) {
@@ -93,7 +103,7 @@ func (app *application) mount() *chi.Mux {
 			r.Put("/activate/{token}", app.activateUserHandler)
 
 			r.Route("/{userID}", func(r chi.Router) {
-				r.Use(app.userContexMiddlewareHandler)
+				r.Use(app.AuthTokenMiddleware)
 
 				r.Get("/", app.getUserHandler)
 				r.Put("/follow", app.followUserHandler)
@@ -101,6 +111,7 @@ func (app *application) mount() *chi.Mux {
 			})
 
 			r.Group(func(r chi.Router) {
+				r.Use(app.AuthTokenMiddleware)
 				r.Get("/feed", app.getUserFeedHandler)
 			})
 		})
@@ -108,6 +119,7 @@ func (app *application) mount() *chi.Mux {
 		// Public routes
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/user", app.registerUserHandler)
+			r.Post("/token", app.createTokenHandler)
 		})
 	})
 

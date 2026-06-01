@@ -29,7 +29,7 @@ const userCtx userKey = "user"
 //	@Security		ApiKeyAuth
 //	@Router			/users/{id} [get]
 func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
-	user := getPostFromCtx(r)
+	user := getUserFromCtx(r)
 
 	if err := app.jsonResponse(w, http.StatusOK, user); err != nil {
 		app.internalServerError(w, r, err)
@@ -56,18 +56,16 @@ type FollowUser struct {
 //	@Security		ApiKeyAuth
 //	@Router			/users/{userID}/follow [put]
 func (app *application) followUserHandler(w http.ResponseWriter, r *http.Request) {
-	followedUser := getUserFromCtx(r)
+	followerUser := getUserFromCtx(r)
 
-	// todo: revert back to auth userID from ctx
-	var payload FollowUser
-	if err := readJSON(w, r, &payload); err != nil {
+	followedUserID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	if err != nil {
 		app.badRequestResponse(w, r, err)
-		return
 	}
 
 	ctx := r.Context()
 
-	if err := app.store.Followers.Follow(ctx, payload.UserID, followedUser.ID); err != nil {
+	if err := app.store.Followers.Follow(ctx, followerUser.ID, followedUserID); err != nil {
 		switch err {
 		case store.ErrConflict:
 			app.conflictResponse(w, r, err)
@@ -97,18 +95,16 @@ func (app *application) followUserHandler(w http.ResponseWriter, r *http.Request
 //	@Security		ApiKeyAuth
 //	@Router			/users/{userID}/unfollow [put]
 func (app *application) unfollowUserHandler(w http.ResponseWriter, r *http.Request) {
-	unfollowedUser := getUserFromCtx(r)
+	followerUser := getUserFromCtx(r)
 
-	// todo: revert back to auth userID from ctx
-	var payload FollowUser
-	if err := readJSON(w, r, &payload); err != nil {
+	unfollowedUserID, err := strconv.ParseInt(chi.URLParam(r, "userID"), 10, 64)
+	if err != nil {
 		app.badRequestResponse(w, r, err)
-		return
 	}
 
 	ctx := r.Context()
 
-	if err := app.store.Followers.Unfollow(ctx, payload.UserID, unfollowedUser.ID); err != nil {
+	if err := app.store.Followers.Unfollow(ctx, followerUser.ID, unfollowedUserID); err != nil {
 		app.internalServerError(w, r, err)
 		return
 	}
